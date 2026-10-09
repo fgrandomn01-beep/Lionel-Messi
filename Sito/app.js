@@ -1,0 +1,836 @@
+"use strict";
+window.MESSI_SNAPSHOT = {
+  schemaVersion: 1,
+  source: "messi.com",
+  sourceUrl: "https://messi.com/estadisticas-totales/",
+  acquiredAt: "2026-10-09T10:42:07.298Z",
+  status: "snapshot",
+  teams: {
+    barcelona: {
+      label: "FC Barcelona",
+      period: "2004-2021",
+      goals: 672,
+      assists: 269,
+      appearances: 778,
+      trophies: 35,
+      doubles: 137,
+      hatTricks: 42,
+      fourGoals: 6,
+      fiveGoals: 1,
+    },
+    argentina: {
+      label: "Argentina",
+      period: "2005-2026",
+      goals: 126,
+      assists: 71,
+      appearances: 208,
+      trophies: 6,
+      doubles: 13,
+      hatTricks: 9,
+      fourGoals: 0,
+      fiveGoals: 1,
+    },
+    psg: {
+      label: "Paris Saint-Germain",
+      period: "2021-2023",
+      goals: 32,
+      assists: 34,
+      appearances: 75,
+      trophies: 3,
+      doubles: 4,
+      hatTricks: 0,
+      fourGoals: 0,
+      fiveGoals: 0,
+    },
+    miami: {
+      label: "Inter Miami",
+      period: "Dal 2023",
+      goals: 102,
+      assists: 57,
+      appearances: 117,
+      trophies: 4,
+      doubles: 23,
+      hatTricks: 2,
+      fourGoals: 1,
+      fiveGoals: 0,
+    },
+    total: {
+      label: "Tutta la carriera",
+      period: "Partite ufficiali",
+      goals: 932,
+      assists: 431,
+      appearances: 1178,
+      trophies: 48,
+      awards: 57,
+      doubles: 177,
+      hatTricks: 53,
+      fourGoals: 7,
+      fiveGoals: 2,
+    },
+  },
+};
+(() => {
+  const $ = (s) => document.querySelector(s),
+    fmt = new Intl.NumberFormat("it-IT");
+  const CONFIG = {
+    officialHome:
+      "https://messi.com/wp-json/wp/v2/pages/73?_fields=content,modified",
+    officialTotals:
+      "https://messi.com/wp-json/wp/v2/pages/3313?_fields=content,modified",
+    cacheTTL: 300000,
+    liveEndpoint: null,
+  };
+  /* Set liveEndpoint to your own HTTPS JSON gateway; never put API keys here. */
+  const store = {
+    read(k) {
+      try {
+        return JSON.parse(localStorage.getItem(k));
+      } catch {
+        return null;
+      }
+    },
+    write(k, v) {
+      try {
+        localStorage.setItem(k, JSON.stringify(v));
+      } catch {}
+    },
+  };
+  const stamp = (v) => {
+    const d = new Date(v);
+    return Number.isNaN(d.getTime())
+      ? "Data non disponibile"
+      : new Intl.DateTimeFormat("it-IT", {
+          timeZone: "Etc/GMT-2",
+          day: "2-digit",
+          month: "2-digit",
+          year: "numeric",
+          hour: "2-digit",
+          minute: "2-digit",
+        }).format(d) + " UTC+2";
+  };
+  const safeURL = (url) => {
+    try {
+      const u = new URL(url);
+      return u.protocol === "https:" ? u.href : null;
+    } catch {
+      return null;
+    }
+  };
+  const media = window.MESSI_MEDIA || {};
+  function hydrate(scope = document) {
+    scope.querySelectorAll("[data-media]").forEach((img) => {
+      const value = media[img.dataset.media];
+      if (value) img.src = value;
+      else img.hidden = true;
+    });
+  }
+  hydrate();
+  // Career chapters share the same acquired official statistics as the dashboard.
+  const chapterData = {
+    barcelona: {
+      title: "La casa.\nLa storia.",
+      period: "2004–2021",
+      crest: "barcelona-logo",
+      image: "barcelona-celebration",
+      alt: "Messi con il Barcellona, composizione fotografica ufficiale",
+      description:
+        "Diciassette stagioni. Dal primo gol al Camp Nou a un’eredità che cambia il calcio d’attacco.",
+      source: "https://www.fcbarcelona.com/en/card/2214377/leo-messi",
+      link: "Esplora l’archivio del club",
+      credit: "Composizione fotografica ufficiale · messi.com",
+      position: "52% 28%",
+    },
+    psg: {
+      title: "Parigi.\nUn altro mondo.",
+      period: "2021–2023",
+      crest: "psg-logo",
+      image: "psg-crisp",
+      alt: "Messi con il PSG contro il Nantes, nel 2021",
+      description:
+        "Un nuovo campionato, accanto a Neymar e Mbappé. Due Ligue 1 e una Supercoppa nel capitolo parigino.",
+      source: "https://messi.com/palmares/",
+      link: "Esplora il palmarès ufficiale",
+      credit: "PSG–Nantes, 2021 · Galleria ufficiale messi.com",
+      position: "52% 32%",
+    },
+    miami: {
+      title: "Miami.\nNuovi orizzonti.",
+      period: "Dal 2023",
+      crest: "miami-logo",
+      image: "gallery-miami-nycfc",
+      alt: "Messi con Inter Miami contro New York City FC, settembre 2025",
+      description:
+        "La Leagues Cup inaugura il capitolo americano. Il numero dieci porta il suo calcio negli Stati Uniti.",
+      source: "https://messi.com/palmares/",
+      link: "Esplora i titoli con Miami",
+      credit:
+        "New York City FC–Inter Miami, 24 settembre 2025 · Bryan Berlin, CC BY-SA 4.0",
+      position: "42% 32%",
+    },
+    argentina: {
+      title: "Argentina.\nIl cuore.",
+      period: "2005–2026",
+      crest: "argentina-logo",
+      image: "messi-worldcup",
+      alt: "Messi con la Coppa del Mondo a Qatar 2022, immagine ufficiale",
+      description:
+        "L’attesa, le finali, la Coppa. Il legame con l’Albiceleste attraversa oltre vent’anni, fino all’ultimo saluto al Monumental.",
+      source:
+        "https://messi.com/emotivo-adios-de-leo-con-la-seleccion-con-un-gol-y-doble-asistencia/",
+      link: "Leggi il saluto all’Argentina",
+      credit: "Qatar 2022 · Composizione fotografica ufficiale messi.com",
+      position: "55% 28%",
+    },
+  };
+  let activeChapter = "barcelona";
+  function renderChapter() {
+    $(".chapter-stage").dataset.chapter = activeChapter;
+    const chapter = chapterData[activeChapter],
+      stats = data.teams[activeChapter];
+    $("#chapter-title").textContent = chapter.title;
+    $("#chapter-period").textContent = chapter.period;
+    $("#chapter-description").textContent = chapter.description;
+    const img = $("#chapter-image");
+    img.src = media[chapter.image];
+    img.alt = chapter.alt;
+    img.style.objectPosition = chapter.position;
+    $("#chapter-crest").src = media[chapter.crest];
+    $("#chapter-crest").alt = stats.label;
+
+    $("#chapter-photo-credit").textContent =
+      chapter.period + " · " + stats.label;
+    $("#chapter-number").textContent = String(
+      Object.keys(chapterData).indexOf(activeChapter) + 1,
+    ).padStart(2, "0");
+    $("#chapter-goals").textContent = fmt.format(stats.goals);
+    $("#chapter-assists").textContent = fmt.format(stats.assists);
+    $("#chapter-titles").textContent = fmt.format(stats.trophies);
+    $("#chapter-update").textContent =
+      "Ultimo aggiornamento: " + stamp(data.acquiredAt);
+    document
+      .querySelectorAll("[data-chapter]")
+      .forEach((button) =>
+        button.setAttribute(
+          "aria-pressed",
+          String(button.dataset.chapter === activeChapter),
+        ),
+      );
+  }
+  document.querySelectorAll("[data-chapter]").forEach((button) =>
+    button.addEventListener("click", () => {
+      if (activeChapter === button.dataset.chapter) return;
+      activeChapter = button.dataset.chapter;
+      renderChapter();
+      if (
+        !matchMedia("(prefers-reduced-motion: reduce)").matches &&
+        typeof $("#chapter-copy")?.animate === "function"
+      )
+        $("#chapter-copy").animate(
+          [
+            { opacity: 0.6, transform: "translateY(6px)" },
+            { opacity: 1, transform: "translateY(0)" },
+          ],
+          { duration: 220, easing: "ease-out" },
+        );
+    }),
+  );
+
+  // The archive intentionally uses one permanent dark theme.
+  const closeMenu = () => {
+    $("#main-nav").classList.remove("open");
+    $("#menu").setAttribute("aria-expanded", "false");
+    $("#menu").setAttribute("aria-label", "Apri menu");
+  };
+  $("#menu").addEventListener("click", () => {
+    const open = $("#main-nav").classList.toggle("open");
+    $("#menu").setAttribute("aria-expanded", String(open));
+    $("#menu").setAttribute("aria-label", open ? "Chiudi menu" : "Apri menu");
+  });
+  document
+    .querySelectorAll("#main-nav a")
+    .forEach((a) => a.addEventListener("click", closeMenu));
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && $("#main-nav").classList.contains("open")) {
+      closeMenu();
+      $("#menu").focus();
+    }
+  });
+  matchMedia("(min-width:901px)").addEventListener("change", (e) => {
+    if (e.matches) closeMenu();
+  });
+  if ("IntersectionObserver" in window) {
+    const navObserver = new IntersectionObserver(
+      (entries) => {
+        for (const e of entries)
+          if (e.isIntersecting)
+            document.querySelectorAll("#main-nav a").forEach((a) => {
+              if (a.hash === "#" + e.target.id)
+                a.setAttribute("aria-current", "location");
+              else a.removeAttribute("aria-current");
+            });
+      },
+      { rootMargin: "-20% 0px -60% 0px" },
+    );
+    document
+      .querySelectorAll("main section[id]")
+      .forEach((s) => navObserver.observe(s));
+  }
+  const trophyData = {
+    worldcup: {
+      title: "Coppa del Mondo",
+      count: "1 vittoria · Argentina",
+      media: "trophy-worldcup",
+      description:
+        "Qatar 2022. Messi segna due gol nella finale contro la Francia e riceve la Golden Ball del torneo. Una vittoria che unisce generazioni di argentini.",
+      years: "2022",
+    },
+    ballon: {
+      title: "Pallone d’Oro",
+      count: "8 riconoscimenti individuali",
+      media: "trophy-ballon",
+      description:
+        "Otto premi distribuiti lungo una carriera. Il primo nel 2009; l’ottavo nel 2023, dopo il trionfo mondiale con l’Argentina.",
+      years: "2009 · 2010 · 2011 · 2012 · 2015 · 2019 · 2021 · 2023",
+    },
+    champions: {
+      title: "Champions League",
+      count: "4 vittorie · FC Barcelona",
+      media: "trophy-champions",
+      description:
+        "Quattro edizioni nella bacheca blaugrana. Messi segna nelle finali del 2009 e del 2011 contro il Manchester United.",
+      years: "2005/06 · 2008/09 · 2010/11 · 2014/15",
+    },
+    copa: {
+      title: "Copa América",
+      count: "2 vittorie · Argentina",
+      media: "trophy-copa",
+      description:
+        "Il successo del 2021 in Brasile chiude una lunga attesa. Nel 2024 l’Argentina difende il titolo negli Stati Uniti.",
+      years: "2021 · 2024",
+    },
+    liga: {
+      title: "LaLiga",
+      count: "10 vittorie · FC Barcelona",
+      media: "trophy-liga",
+      description:
+        "Dieci campionati spagnoli attraversano la sua storia con il Barcellona. Nel 2011/12 firma 50 gol in una singola edizione.",
+      years:
+        "2004/05 · 2005/06 · 2008/09 · 2009/10 · 2010/11 · 2012/13 · 2014/15 · 2015/16 · 2017/18 · 2018/19",
+    },
+    boot: {
+      title: "Scarpa d’Oro europea",
+      count: "6 riconoscimenti individuali",
+      media: "trophy-boot",
+      description:
+        "Il premio ai migliori marcatori dei campionati europei. Sei vittorie che accompagnano la sua prolificità con il Barcellona.",
+      years: "2009/10 · 2011/12 · 2012/13 · 2016/17 · 2017/18 · 2018/19",
+    },
+  };
+  let dialogOpener;
+  const dialog = $("#trophy-dialog");
+  document.querySelectorAll("[data-trophy]").forEach((b) =>
+    b.addEventListener("click", () => {
+      const d = trophyData[b.dataset.trophy];
+      dialogOpener = b;
+      $("#dialog-title").textContent = d.title;
+      $("#dialog-count").textContent = d.count;
+      $("#dialog-description").textContent = d.description;
+      $("#dialog-years").textContent = d.years;
+      $("#dialog-photo-note").textContent =
+        d.media === "trophy-ballon"
+          ? "Messi con il suo ottavo Pallone d’Oro, 2023. "
+          : d.media === "trophy-worldcup"
+            ? "Messi con la Coppa del Mondo a Qatar 2022. "
+            : d.media === "trophy-champions"
+              ? "Fotografia del trofeo UEFA Champions League."
+              : "Il premio, nella sua forma originale.";
+      $("#dialog-image").src = media[d.media + "-detail"] || media[d.media];
+      $("#dialog-image").alt =
+        d.media === "trophy-ballon"
+          ? "Messi con il suo ottavo Pallone d’Oro nel 2023"
+          : d.media === "trophy-worldcup"
+            ? "Messi con la Coppa del Mondo a Qatar 2022"
+            : d.title;
+      dialog.showModal();
+      document.body.style.overflow = "hidden";
+      $("#dialog-close").focus();
+    }),
+  );
+  const closeDialog = () => dialog.close();
+  $("#dialog-close").addEventListener("click", closeDialog);
+  dialog.addEventListener("click", (e) => {
+    if (e.target === dialog) {
+      const r = dialog.getBoundingClientRect();
+      if (
+        e.clientX < r.left ||
+        e.clientX > r.right ||
+        e.clientY < r.top ||
+        e.clientY > r.bottom
+      )
+        closeDialog();
+    }
+  });
+  dialog.addEventListener("close", () => {
+    document.body.style.overflow = "";
+    dialogOpener?.focus();
+  });
+  const track = $("#trophy-track"),
+    reduced = matchMedia("(prefers-reduced-motion: reduce)");
+  function shift(sign) {
+    const item = track.querySelector(".trophy-card"),
+      gap = Number.parseFloat(getComputedStyle(track).columnGap) || 16;
+    track.scrollBy({
+      left: sign * (item.getBoundingClientRect().width + gap),
+      behavior: reduced.matches ? "instant" : "smooth",
+    });
+  }
+  $("#trophies-prev").addEventListener("click", () => shift(-1));
+  $("#trophies-next").addEventListener("click", () => shift(1));
+  const valid = (d) =>
+    d?.schemaVersion === 1 &&
+    !Number.isNaN(Date.parse(d.acquiredAt)) &&
+    ["total", "barcelona", "argentina", "psg", "miami"].every(
+      (k) =>
+        d.teams?.[k] &&
+        [
+          "goals",
+          "assists",
+          "appearances",
+          "trophies",
+          "doubles",
+          "hatTricks",
+          "fourGoals",
+          "fiveGoals",
+        ].every((p) => Number.isInteger(d.teams[k][p]) && d.teams[k][p] >= 0),
+    );
+  let data = window.MESSI_SNAPSHOT,
+    team = "total",
+    busy = false;
+  const cached = store.read("messi-premium-stats-v1");
+  if (
+    valid(cached) &&
+    Date.parse(cached.acquiredAt) > Date.parse(data.acquiredAt)
+  )
+    data = { ...cached, status: "cached" };
+  function render() {
+    const d = data.teams[team];
+    $("#team-name").textContent = d.label;
+    $("#team-period").textContent = d.period;
+    for (const k of [
+      "goals",
+      "assists",
+      "appearances",
+      "trophies",
+      "doubles",
+      "hatTricks",
+      "fourGoals",
+      "fiveGoals",
+    ])
+      $("#stat-" + k).textContent = fmt.format(d[k]);
+    $("#stat-ratio").textContent = d.appearances
+      ? fmt.format(Number((d.goals / d.appearances).toFixed(2)))
+      : "N/D";
+    $("#data-time").textContent = stamp(data.acquiredAt);
+    $("#data-time").dateTime = data.acquiredAt;
+    document
+      .querySelectorAll(".data-date")
+      .forEach((n) => (n.textContent = stamp(data.acquiredAt)));
+    document
+      .querySelectorAll("[data-team]")
+      .forEach((b) =>
+        b.setAttribute("aria-pressed", String(b.dataset.team === team)),
+      );
+    renderChapter();
+  }
+  render();
+  document.querySelectorAll("[data-team]").forEach((b) =>
+    b.addEventListener("click", () => {
+      team = b.dataset.team;
+      render();
+    }),
+  );
+  function counters(s) {
+    return [...s.matchAll(/"maxperc"\s*:\s*"([\d.]+)"/g)].map((m) =>
+      Math.floor(Number(m[1])),
+    );
+  }
+  function parseOfficial(home, total) {
+    const clean = (s) => s.replace(/<[^>]*>/g, " "),
+      teams = {};
+    for (const [key, id] of [
+      ["barcelona", "barcelona"],
+      ["argentina", "argentina"],
+      ["psg", "psg"],
+      ["miami", "inter"],
+    ]) {
+      const b = home.match(
+        new RegExp(
+          '<div class="grafico ' +
+            id +
+            '\\b([\\s\\S]*?)(?=<div class="tabs|<div class="grafico|<section|$)',
+        ),
+      )?.[0];
+      if (!b) throw Error("changed");
+      const v = counters(b).slice(0, 4);
+      if (v.length !== 4) throw Error("changed");
+      const count = (w) =>
+        Number(clean(b).match(new RegExp("(\\d+)\\s+" + w + "\\b"))?.[1] ?? 0);
+      teams[key] = {
+        ...window.MESSI_SNAPSHOT.teams[key],
+        goals: v[0],
+        assists: v[1],
+        appearances: v[2],
+        trophies: v[3],
+        doubles: count("DOBLETES"),
+        hatTricks: count("HAT-TRICK"),
+        fourGoals: count("POKER"),
+        fiveGoals: count("REPOKER"),
+      };
+    }
+    const v = counters(total);
+    if (v.length < 5) throw Error("changed");
+    const count = (w) => {
+      const m = clean(total).match(new RegExp("(\\d+)\\s+" + w + "\\b"));
+      if (!m) throw Error("changed");
+      return Number(m[1]);
+    };
+    teams.total = {
+      ...window.MESSI_SNAPSHOT.teams.total,
+      goals: v[0],
+      assists: v[1],
+      appearances: v[2],
+      trophies: v[3],
+      awards: v[4],
+      doubles: count("DOBLETES"),
+      hatTricks: count("HAT-TRICK"),
+      fourGoals: count("POKER"),
+      fiveGoals: count("REPOKER"),
+    };
+    for (const k of ["goals", "assists", "appearances", "trophies"])
+      if (
+        ["barcelona", "argentina", "psg", "miami"].reduce(
+          (n, t) => n + teams[t][k],
+          0,
+        ) !== teams.total[k]
+      )
+        throw Error("inconsistent");
+    if (teams.total.goals < window.MESSI_SNAPSHOT.teams.total.goals)
+      throw Error("regression");
+    return {
+      schemaVersion: 1,
+      source: "messi.com",
+      sourceUrl: "https://messi.com/estadisticas-totales/",
+      acquiredAt: new Date().toISOString(),
+      status: "fresh",
+      teams,
+    };
+  }
+  async function getJSON(url) {
+    const c = new AbortController(),
+      timer = setTimeout(() => c.abort(), 12000);
+    try {
+      const r = await fetch(url, {
+        signal: c.signal,
+        credentials: "omit",
+        headers: { Accept: "application/json" },
+      });
+      if (!r.ok) throw Error("source");
+      return await r.json();
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+  async function refresh(manual = false) {
+    if (busy) return;
+    if (
+      !manual &&
+      data.status === "cached" &&
+      Date.now() - Date.parse(data.acquiredAt) < CONFIG.cacheTTL
+    ) {
+      $("#data-status").textContent =
+        "Statistiche salvate. Ultimo aggiornamento indicato sotto.";
+      return;
+    }
+    busy = true;
+    $("#refresh").disabled = true;
+    $("#refresh span").textContent = "Verifica…";
+    $("#data-status").textContent = "Aggiornamento delle statistiche in corso…";
+    try {
+      const [home, total] = await Promise.all([
+        getJSON(CONFIG.officialHome),
+        getJSON(CONFIG.officialTotals),
+      ]);
+      const next = parseOfficial(home.content.rendered, total.content.rendered);
+      if (!valid(next)) throw Error("invalid");
+      data = next;
+      store.write("messi-premium-stats-v1", next);
+      render();
+      $("#data-status").textContent = "Statistiche aggiornate.";
+    } catch {
+      $("#data-status").textContent =
+        "Aggiornamento momentaneamente non disponibile. Mostriamo l’ultima lettura valida; puoi riprovare.";
+    } finally {
+      busy = false;
+      $("#refresh").disabled = false;
+      $("#refresh span").textContent = "Aggiorna";
+    }
+  }
+  $("#refresh").addEventListener("click", () => refresh(true));
+  function node(tag, text, cls) {
+    const n = document.createElement(tag);
+    n.textContent = text;
+    if (cls) n.className = cls;
+    return n;
+  }
+  function link(url, text) {
+    const a = node("a", text);
+    a.href = url;
+    a.target = "_blank";
+    a.rel = "noopener noreferrer";
+    return a;
+  }
+
+  const photographs = window.MESSI_GALLERY || [],
+    photoDialog = $("#photo-dialog");
+  let photoIndex = 0,
+    photoOpener;
+  const photoGrid = $("#photo-grid");
+  photographs.forEach((photo, index) => {
+    const button = node("button", "", "photo-tile");
+    button.type = "button";
+    button.dataset.photo = String(index);
+    button.hidden = index >= 8;
+    button.setAttribute("aria-label", "Apri fotografia: " + photo.title);
+    const image = document.createElement("img");
+    image.src = media[photo.key];
+    image.alt = photo.alt || photo.title;
+    image.loading = "lazy";
+    image.width = photo.width || 1000;
+    image.height = photo.height || 1200;
+    image.style.objectPosition = photo.position || "50% 25%";
+    const copy = node("span", "", "photo-tile-copy");
+    copy.append(
+      node("span", photo.tag || "LIONEL MESSI", "photo-tag"),
+      node("strong", photo.title),
+      node("span", photo.caption || "", "photo-tile-caption"),
+    );
+    const zoom = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    zoom.setAttribute("class", "symbol-icon photo-zoom");
+    zoom.setAttribute("aria-hidden", "true");
+    const use = document.createElementNS("http://www.w3.org/2000/svg", "use");
+    use.setAttribute("href", "#icon-magnifying-glass-plus");
+    zoom.append(use);
+    button.append(image, copy, zoom);
+    button.addEventListener("click", () => {
+      photoOpener = button;
+      photoIndex = index;
+      renderPhoto();
+      photoDialog.showModal();
+      document.body.style.overflow = "hidden";
+      $("#photo-close").focus();
+    });
+    photoGrid.append(button);
+  });
+  $("#gallery-more").addEventListener("click", () => {
+    const expanded =
+      $("#gallery-more").getAttribute("aria-expanded") !== "true";
+    $("#gallery-more").setAttribute("aria-expanded", String(expanded));
+    document
+      .querySelectorAll(".photo-tile")
+      .forEach((button, i) => (button.hidden = !expanded && i >= 8));
+    $("#gallery-more").textContent = expanded
+      ? "Mostra meno fotografie"
+      : "Mostra tutte le fotografie";
+    if (!expanded) $("#gallery-more").focus();
+  });
+  function renderPhoto() {
+    const p = photographs[photoIndex];
+    if (!p) return;
+    $("#photo-full").src = media[p.key];
+    $("#photo-full").alt = p.alt || p.title;
+    $("#photo-title").textContent = p.title;
+    $("#photo-caption").textContent = p.caption || "";
+    $("#photo-counter").textContent =
+      String(photoIndex + 1).padStart(2, "0") +
+      " / " +
+      String(photographs.length).padStart(2, "0");
+    $("#photo-author").textContent = p.author + " · " + p.license;
+    for (const [id, url] of [
+      ["photo-origin", p.sourceUrl],
+      ["photo-license", p.licenseUrl],
+    ]) {
+      const u = safeURL(url);
+      $("#" + id).hidden = id === "photo-origin" || !u;
+      if (u) $("#" + id).href = u;
+    }
+  }
+  function stepPhoto(sign) {
+    photoIndex = (photoIndex + sign + photographs.length) % photographs.length;
+    renderPhoto();
+  }
+  $("#photo-prev").addEventListener("click", () => stepPhoto(-1));
+  $("#photo-next").addEventListener("click", () => stepPhoto(1));
+  $("#photo-close").addEventListener("click", () => photoDialog.close());
+  photoDialog.addEventListener("close", () => {
+    document.body.style.overflow = "";
+    photoOpener?.focus();
+  });
+  photoDialog.addEventListener("keydown", (e) => {
+    if (e.key === "ArrowLeft") {
+      e.preventDefault();
+      stepPhoto(-1);
+    }
+    if (e.key === "ArrowRight") {
+      e.preventDefault();
+      stepPhoto(1);
+    }
+  });
+
+  const credits = window.MESSI_CREDITS || [];
+  for (const c of credits) {
+    const item = node("div", "", "asset-credit-item");
+    item.append(node("h4", c.title || c.key));
+    const body = node("div", "");
+    body.append(node("p", c.author + " · " + c.license));
+    if (c.note) body.append(node("p", c.note));
+    const source = safeURL(c.sourceUrl),
+      license = safeURL(c.licenseUrl);
+
+    if (license && license !== source) body.append(link(license, "Licenza"));
+    item.append(body);
+    $("#asset-credits").append(item);
+  }
+  $("#worldcup-credit").textContent = "Qatar 2022 · Il sogno diventato realtà.";
+  let liveTimer,
+    liveBusy = false;
+  function showLive(d, stale = false) {
+    $("#live-state").textContent = stale
+      ? "Ultima lettura live valida"
+      : d.fixtures.length
+        ? "Partita in corso"
+        : "Nessuna partita live";
+    $("#live-title").textContent =
+      "Inter Miami · " + (d.source || "Feed sportivo");
+    const content = $("#live-content");
+    content.replaceChildren();
+    if (!d.fixtures.length)
+      content.append(
+        node("p", "Nessun incontro live rilevato nell’ultima lettura."),
+      );
+    for (const f of d.fixtures) {
+      content.append(node("p", f.home + " · " + f.away));
+      content.append(
+        node(
+          "strong",
+          `${f.homeGoals ?? "N/D"} : ${f.awayGoals ?? "N/D"}`,
+          "live-score",
+        ),
+      );
+      content.append(
+        node("p", f.status + " · " + (f.elapsed ?? "N/D") + " min"),
+      );
+    }
+    $("#live-time").textContent =
+      "Fonte: " +
+      (d.source || "Feed sportivo") +
+      " · Acquisito: " +
+      stamp(d.acquiredAt) +
+      (stale ? " · Fonte momentaneamente non disponibile" : "");
+  }
+  async function live() {
+    if (document.hidden || liveBusy || !CONFIG.liveEndpoint) return;
+    liveBusy = true;
+    let active = false;
+    try {
+      const d = await getJSON(CONFIG.liveEndpoint);
+      if (
+        !Array.isArray(d.fixtures) ||
+        d.fixtures.some(
+          (f) =>
+            !f ||
+            typeof f.home !== "string" ||
+            typeof f.away !== "string" ||
+            typeof f.status !== "string",
+        ) ||
+        Number.isNaN(Date.parse(d.acquiredAt))
+      )
+        throw Error("invalid");
+      showLive(d);
+      store.write("messi-premium-live-v1", d);
+      active = d.fixtures.length > 0;
+    } catch {
+      const old = store.read("messi-premium-live-v1");
+      if (old?.acquiredAt && Array.isArray(old.fixtures)) showLive(old, true);
+      else {
+        $("#live-state").textContent = "Feed momentaneamente non disponibile";
+        $("#live-time").textContent =
+          "Puoi consultare il calendario ufficiale.";
+      }
+    } finally {
+      liveBusy = false;
+      clearTimeout(liveTimer);
+      if (!document.hidden)
+        liveTimer = setTimeout(live, active ? 15000 : 60000);
+    }
+  }
+  document.addEventListener("visibilitychange", () => {
+    clearTimeout(liveTimer);
+    if (!document.hidden) {
+      live();
+      if (Date.now() - Date.parse(data.acquiredAt) > CONFIG.cacheTTL) refresh();
+    }
+  });
+  // One brief entrance per editorial block; content stays visible without observer support.
+  if (
+    "IntersectionObserver" in window &&
+    !matchMedia("(prefers-reduced-motion: reduce)").matches
+  ) {
+    const reveal = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries)
+          if (entry.isIntersecting) {
+            entry.target.classList.add("is-visible");
+            reveal.unobserve(entry.target);
+          }
+      },
+      { threshold: 0.06, rootMargin: "0px 0px 40px 0px" },
+    );
+    document
+      .querySelectorAll(
+        ".section-top, .records-grid, .person-layout, .creator-credit",
+      )
+      .forEach((el) => {
+        el.classList.add("reveal-ready");
+        reveal.observe(el);
+      });
+  }
+  let progressPending = false;
+  function updateProgress() {
+    const range = document.documentElement.scrollHeight - window.innerHeight;
+    $("#reading-progress").style.transform =
+      "scaleX(" +
+      (range > 0 ? Math.min(1, Math.max(0, window.scrollY / range)) : 0) +
+      ")";
+    progressPending = false;
+  }
+  window.addEventListener(
+    "scroll",
+    () => {
+      if (!progressPending) {
+        progressPending = true;
+        requestAnimationFrame(updateProgress);
+      }
+    },
+    { passive: true },
+  );
+  window.addEventListener("resize", updateProgress);
+  if (location.protocol.startsWith("http")) {
+    setTimeout(() => refresh(), 1200);
+    if (CONFIG.liveEndpoint) {
+      $(".live-panel").hidden = false;
+      live();
+    }
+  } else
+    $("#data-status").textContent =
+      "Archivio locale: ultima lettura valida inclusa.";
+})();
